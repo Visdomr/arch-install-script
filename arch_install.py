@@ -74,8 +74,8 @@ def configure_network():
 
 # List available disks
 def list_disks():
-    disks = [d for d in os.listdir("/dev") if d.startswith(('sd', 'nvme')) and not d[-1].isdigit()]
-    return disks
+    print("Detecting available disks...")
+    disks = []
 
 # Manual partitioning with cfdisk
 def manual_partitioning(disk):
