@@ -6,6 +6,7 @@ import sys
 import parted
 import getpass
 import re
+import json
 
 # Ensure the script runs as root
 if os.geteuid() != 0:
@@ -76,6 +77,40 @@ def configure_network():
 def list_disks():
     print("Detecting available disks...")
     disks = []
+    
+    # Method 1: Use lsblk --json (similar to archinstall)
+    try:
+        result = run_command("lsblk --json --nodeps --output NAME,SIZE,TYPE", check=True)
+        lsblk_data = json.loads(result.stdout)
+        for device in lsblk_data.get("blockdevices", []):
+            if device.get("type") == "disk":
+                disk_name = device.get("name")
+                disk_size = device.get("size")
+                if disk_name.startswith(("sd", "nvme")):
+                    disks.append(disk_name)
+                    print(f"Found disk: /dev/{disk_name} ({disk_size})")
+    except Exception as e:
+        print(f"Error using lsblk: {e}")
+
+    # Method 2: Fallback to direct /dev/nvme* check
+    try:
+        nvme_devs = [d for d in os.listdir("/dev") if d.startswith("nvme") and not re.match(r"nvme[0-9]+n[0-9]+p[0-9]+", d)]
+        for dev in nvme_devs:
+            if dev not in disks:
+                disks.append(dev)
+                print(f"Found NVMe disk (fallback): /dev/{dev}")
+    except Exception as e:
+        print(f"Error checking /dev/nvme*: {e}")
+
+    # Diagnostic output
+    if not disks:
+        print("No disks detected! Running diagnostics...")
+        run_command("lsblk", check=False)
+        run_command("dmesg | grep -i nvme", check=False)
+        print("Please check BIOS settings (AHCI vs. RAID, Intel VMD) or kernel logs for NVMe issues.")
+        sys.exit(1)
+
+    return disks
 
 # Manual partitioning with cfdisk
 def manual_partitioning(disk):
